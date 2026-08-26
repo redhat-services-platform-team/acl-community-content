@@ -1,0 +1,53 @@
+---
+# ACL Community Content -- Site Configuration
+#
+# Copy this file to site_config.yml and fill in your values:
+#   cp controller_config/site_config.yml.example controller_config/site_config.yml
+#
+# site_config.yml is gitignored and will not be committed.
+
+# ---------------------------------------------------------------------------
+# AAP Connection
+# ---------------------------------------------------------------------------
+
+# Full URL of the AAP controller (include https://).
+aap_hostname: https://your-aap-host.example.com
+
+# Set to false only if the controller uses a self-signed certificate.
+aap_validate_certs: true
+
+# Personal Access Token is passed at runtime -- do NOT store it here:
+#   -e aap_token=YOUR_PAT
+
+# ---------------------------------------------------------------------------
+# Project
+# ---------------------------------------------------------------------------
+
+# Public HTTPS URL of this repository. AAP can sync without an SCM credential.
+acl_project_scm_url: https://github.com/redhat-services-platform-team/acl-community-content.git
+
+# Branch for AAP to track (default: main).
+acl_project_scm_branch: main
+
+# Leave empty -- this repository is public.
+acl_project_scm_credential: ""
+
+# ---------------------------------------------------------------------------
+# Credentials (must already exist in AAP)
+# ---------------------------------------------------------------------------
+
+# Machine credential for Linux targets.
+acl_linux_credential: acl_machine_credential
+
+# Machine credential for Windows targets.
+acl_windows_credential: acl_windows_credential
+
+# ---------------------------------------------------------------------------
+# Organization and Inventory
+# ---------------------------------------------------------------------------
+
+# AAP organization that owns the project, templates, and inventory.
+acl_organization: Default
+
+# Inventory name created by CaC when those playbooks exist.
+acl_inventory_name: acl_lab_inventory

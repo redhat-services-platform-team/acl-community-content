@@ -1,0 +1,3 @@
+# System packages for EE build. Add platform-specific deps as scenarios require them.
+python3-devel [platform:rhel-8 platform:rhel-9]
+gcc [platform:rhel-8 platform:rhel-9]
