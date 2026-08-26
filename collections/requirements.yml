@@ -1,0 +1,15 @@
+---
+# Shared Ansible collections for ACL community content.
+# Install from repo root:
+#   ansible-galaxy collection install -r collections/requirements.yml
+#
+# Add collections here when a contribution requires them. Keep version ranges
+# compatible with AAP 2.6+ execution environments.
+
+collections:
+  - name: ansible.posix
+    version: ">=2.1.0,<3.0.0"
+  - name: ansible.windows
+    version: ">=2.0.0,<3.0.0"
+  - name: community.general
+    version: ">=8.0.0,<13.0.0"

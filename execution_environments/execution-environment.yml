@@ -1,0 +1,18 @@
+---
+# Execution environment definition for ansible-builder (version 3 schema).
+# Build from repo root:
+#   ansible-builder build -f execution_environments/execution-environment.yml -t acl-community-content-ee
+
+version: 3
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform/ee-supported-rhel9:latest
+
+dependencies:
+  galaxy: requirements.yml
+  python: requirements.txt
+  system: bindep.txt
+
+options:
+  package_manager_path: /usr/bin/microdnf

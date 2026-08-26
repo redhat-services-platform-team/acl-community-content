@@ -1,0 +1,19 @@
+---
+profile: production
+
+exclude_paths:
+  - .github/
+  - .git/
+  - .ansible/
+  - .pre-commit-config.yaml
+  - .ansible-lint
+  - collections/
+  - execution_environments/
+
+offline: false
+
+warn_list:
+  - experimental
+  - role-name
+
+project_dir: ./
