@@ -110,6 +110,14 @@ None.
           - "10.100.1.11"
 ```
 
+## See Also
+
+For more comprehensive VMware automation — including snapshot management,
+OVF export/deploy, content library operations, cluster settings, and ESXi
+maintenance — see the
+[cloud.vmware_ops](https://github.com/redhat-cop/cloud.vmware_ops)
+validated Ansible collection from Red Hat CoP.
+
 ## License
 
 Apache-2.0
