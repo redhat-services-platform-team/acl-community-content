@@ -1,0 +1,111 @@
+---
+# Shared molecule base configuration, auto-discovered by molecule and
+# deep-merged UNDER every scenario's molecule.yml (scenario keys win; lists
+# are replaced wholesale, so a scenario restating e.g. the ansible_playbook
+# args list or test_sequence replaces it entirely).
+#
+# Relative paths resolve per scenario directory (molecule/<scenario>/).
+# The inventory stack is the scenario's declaration of what it tests. The
+# default is Linux only: base/ (localhost + platform group_vars) + linux/.
+# Windows is opt-in — a scenario restates this list in its molecule.yml with
+# ../utils/inventory/windows/ added (lists are replaced wholesale on merge);
+# inventory/ is an optional scenario-local overlay.
+# Dependency install is left to the operator (see molecule/README.md Setup).
+# Re-enable to install python + collection deps on every run (fast no-op once
+# satisfied). Paths are repo-root-relative: the command inherits molecule's
+# cwd, and molecule is invoked from the repo root.
+#dependency:
+#  name: shell
+#  command: >-
+#    pip install -r molecule/requirements.txt
+#    && ansible-galaxy collection install -r molecule/requirements.yml
+
+ansible:
+  # Molecule generates its own ansible.cfg, so the repo's roles_path does not
+  # apply; resolve the repo's roles/ (relative to the scenario dir) for
+  # converge playbooks that reference roles by name.
+  env:
+    ANSIBLE_ROLES_PATH: ../../roles
+    # macOS only, no-op elsewhere: ansible runs each host in a forked worker,
+    # and connection plugins that reach into CoreFoundation from the child
+    # (pywinrm -> requests -> urllib -> SystemConfiguration proxy lookup) make
+    # the ObjC runtime abort the process. The symptom is a "Python quit
+    # unexpectedly" dialog and "A worker was found in a dead state" at the
+    # first task that talks to a guest.
+    OBJC_DISABLE_INITIALIZE_FORK_SAFETY: "YES"
+  executor:
+    args:
+      ansible_playbook:
+        - --inventory=../utils/inventory/base/
+        - --inventory=../utils/inventory/linux/
+        - --inventory=inventory/
+        # The runtime inventory (connection details written by create.yml
+        # into the molecule ephemeral directory) is injected by molecule
+        # itself on every command — do not list it here. Because it is parsed
+        # BEFORE these sources, static inventories must never define
+        # ansible_* connection vars for test hosts.
+  playbooks:
+    create: ../utils/provisioners/aws/create.yml
+    destroy: ../utils/provisioners/aws/destroy.yml
+    # Optional scenario-local hook for test-harness prerequisites (e.g.
+    # packages missing from a stock AMI). Molecule skips the step as
+    # "Missing playbook" when the scenario ships no prepare.yml; the
+    # connection wait happens at the end of create.yml.
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+
+scenario:
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy
+
+verifier:
+  name: ansible
+
+# --- Hypothetical (untested): run the test sequence through ansible-navigator
+# + an execution environment. Molecule supports this natively via the executor
+# backend —
+#   https://ansible.readthedocs.io/projects/molecule/configuration/
+# — but the pieces are disjointed across the codebase (molecule 26.6.0):
+#   - backend enum lives in the schema (molecule/data/molecule.json),
+#     read by Config.executor (molecule/config.py:360).
+#   - AnsiblePlaybook.bake() (molecule/provisioner/ansible_playbook.py:132)
+#     builds `ansible-navigator run <playbook> --mode stdout ...`;
+#     --mode stdout is hardcoded (do not pass it again) and bake() aborts
+#     unless `ansible-navigator --version` succeeds on the host.
+#   - Ansible.ansible_args (molecule/provisioner/ansible.py:116) emits
+#     `<ansible_navigator args> -- <ansible_playbook args>`, so the
+#     --inventory stack above is forwarded unchanged after `--` — do NOT
+#     restate it under ansible_navigator.
+# Every controller-side dep (boto3, pywinrm, the collections in
+# molecule/requirements.yml) must be baked into the EE image instead of the
+# host venv (see execution_environments/, `make ee`); AWS credentials and
+# molecule's ephemeral directory (runtime inventory + SSH key from create.yml)
+# must be threaded into the container explicitly. The dependency step is
+# disabled here because it always runs on the HOST (molecule/dependency/
+# never consults the executor backend), so it would install deps the EE
+# never sees.
+#
+# To enable: merge this structure into the live sections above.
+#
+# dependency:
+#   enabled: false
+#
+# ansible:
+#   executor:
+#     backend: ansible-navigator
+#     args:
+#       ansible_navigator:
+#         - --execution-environment-image=<registry>/<ee-image>:<tag>
+#         - --pull-policy=missing
+#         - --pass-environment-variable=AWS_ACCESS_KEY_ID
+#         - --pass-environment-variable=AWS_SECRET_ACCESS_KEY
+#         - --pass-environment-variable=AWS_REGION
+#         # ephemeral dir must resolve to the same path inside the container
+#         - --execution-environment-volume-mounts=~/.cache/molecule:~/.cache/molecule

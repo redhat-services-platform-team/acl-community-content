@@ -1,0 +1,110 @@
+---
+# Job templates for ACL community content.
+# All site-specific values (credentials, inventory, organization) are
+# provided by site_config.yml.
+
+controller_templates:
+  # --- VMware ---
+  - name: ACL_linux_vcenter_vm_provision
+    description: Clone a VM from a vCenter template
+    organization: "{{ acl_organization | default('Default') }}"
+    project: acl-community-content
+    inventory: "{{ acl_inventory_name | default('acl_lab_inventory') }}"
+    playbook: playbooks/linux-vcenter-vm-provision.yml
+    execution_environment: Default execution environment
+    credentials:
+      - "{{ acl_vcenter_credential | default(omit) }}"
+    ask_variables_on_launch: true
+    ask_limit_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: "vCenter VM Provision Survey"
+      description: "Provide VM provisioning details"
+      spec:
+        - question_name: "VM Name"
+          question_description: "Name for the new virtual machine"
+          variable: vcenter_vm_provision_name
+          type: text
+          required: true
+          default: ""
+
+        - question_name: "Template"
+          question_description: "vCenter template to clone from"
+          variable: vcenter_vm_provision_template
+          type: text
+          required: true
+          default: ""
+
+        - question_name: "Datacenter"
+          question_description: "Target vCenter datacenter"
+          variable: vcenter_vm_provision_datacenter
+          type: text
+          required: true
+          default: ""
+
+        - question_name: "Cluster"
+          question_description: "Target vCenter cluster"
+          variable: vcenter_vm_provision_cluster
+          type: text
+          required: true
+          default: ""
+
+        - question_name: "Datastore"
+          question_description: "Target datastore or datastore cluster"
+          variable: vcenter_vm_provision_datastore
+          type: text
+          required: false
+          default: ""
+
+        - question_name: "VM Folder"
+          question_description: "vCenter folder path (default: datacenter root)"
+          variable: vcenter_vm_provision_folder
+          type: text
+          required: false
+          default: ""
+
+        - question_name: "Network"
+          question_description: "vCenter port group / network name"
+          variable: survey_network
+          type: text
+          required: true
+          default: "VM Network"
+
+        - question_name: "IP Address"
+          question_description: "Static IP for the VM (leave blank for DHCP)"
+          variable: survey_ip_address
+          type: text
+          required: false
+          default: ""
+
+        - question_name: "Netmask"
+          question_description: "Subnet mask (e.g. 255.255.255.0)"
+          variable: survey_netmask
+          type: text
+          required: false
+          default: "255.255.255.0"
+
+        - question_name: "Gateway"
+          question_description: "Default gateway"
+          variable: survey_gateway
+          type: text
+          required: false
+          default: ""
+
+        - question_name: "CPU Count"
+          question_description: "Number of vCPUs (0 = keep template default)"
+          variable: vcenter_vm_provision_cpu
+          type: integer
+          required: false
+          default: 0
+          min: 0
+          max: 128
+
+        - question_name: "Memory (MB)"
+          question_description: "Memory in MB (0 = keep template default)"
+          variable: vcenter_vm_provision_memory_mb
+          type: integer
+          required: false
+          default: 0
+          min: 0
+          max: 524288

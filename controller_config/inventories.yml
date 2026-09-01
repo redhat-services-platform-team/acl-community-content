@@ -1,0 +1,9 @@
+---
+# AAP inventory for ACL community content.
+# All site-specific values are provided by site_config.yml.
+
+controller_inventories:
+  - name: "{{ acl_inventory_name | default('acl_lab_inventory') }}"
+    organization: "{{ acl_organization | default('Default') }}"
+    description: ACL hosts for running community content
+    variables: {}

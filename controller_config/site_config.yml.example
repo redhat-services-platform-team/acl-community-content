@@ -42,6 +42,10 @@ acl_linux_credential: acl_machine_credential
 # Machine credential for Windows targets.
 acl_windows_credential: acl_windows_credential
 
+# VMware vCenter credential (AAP "VMware vCenter" type).
+# Leave empty if you do not use VMware playbooks.
+acl_vcenter_credential: ""
+
 # ---------------------------------------------------------------------------
 # Organization and Inventory
 # ---------------------------------------------------------------------------
@@ -49,5 +53,5 @@ acl_windows_credential: acl_windows_credential
 # AAP organization that owns the project, templates, and inventory.
 acl_organization: Default
 
-# Inventory name created by CaC when those playbooks exist.
+# Inventory name created by CaC.
 acl_inventory_name: acl_lab_inventory

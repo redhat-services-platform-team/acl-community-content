@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: vcenter_vm_provision
+  author: Ansible Services Platform Team, Red Hat
+  description: Provision a virtual machine on VMware vCenter
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: GenericLinux
+      versions:
+        - all
+  galaxy_tags:
+    - vmware
+    - vcenter
+    - virtualization
+    - provisioning
+
+dependencies: []

@@ -1,0 +1,60 @@
+---
+# vCenter connection.  When using an AAP "VMware vCenter" credential the
+# hostname, username, and password are injected as environment variables.
+# The defaults below pick them up automatically.
+vcenter_vm_provision_hostname: "{{ lookup('env', 'VMWARE_HOST') }}"
+vcenter_vm_provision_username: "{{ lookup('env', 'VMWARE_USER') }}"
+vcenter_vm_provision_password: "{{ lookup('env', 'VMWARE_PASSWORD') }}"
+vcenter_vm_provision_validate_certs: "{{ lookup('env', 'VMWARE_VALIDATE_CERTS') | default(true, true) }}"
+vcenter_vm_provision_port: 443
+
+# VM placement — all required for new VMs.
+vcenter_vm_provision_datacenter: ""
+vcenter_vm_provision_cluster: ""
+vcenter_vm_provision_datastore: ""
+vcenter_vm_provision_folder: "/{{ vcenter_vm_provision_datacenter }}/vm/"
+
+# Template to clone from (required).
+vcenter_vm_provision_template: ""
+
+# VM identity.
+vcenter_vm_provision_name: ""
+vcenter_vm_provision_state: poweredon
+
+# Hardware overrides (applied on top of the template defaults).
+# Set to 0 or omit to keep the template's value.
+vcenter_vm_provision_cpu: 0
+vcenter_vm_provision_memory_mb: 0
+
+# Disk overrides — list of dicts.  Only needed when the template
+# disk layout must change.  Omit to keep the template disks as-is.
+# Example:
+#   - size_gb: 100
+#     type: thin
+#     datastore: Datastore01
+vcenter_vm_provision_disks: []
+
+# Network configuration — list of dicts.
+# Example:
+#   - name: "VM Network"
+#     device_type: vmxnet3
+#     ip: "10.0.0.50"
+#     netmask: "255.255.255.0"
+#     gateway: "10.0.0.1"
+vcenter_vm_provision_networks: []
+
+# Guest customization (requires VMware Tools on the template).
+# Set vcenter_vm_provision_customization to {} to skip.
+vcenter_vm_provision_customization:
+  hostname: ""
+  domain: ""
+  dns_servers: []
+  dns_suffix: []
+
+# An existing vCenter customization spec to apply instead of inline
+# customization.  When set the inline customization dict is ignored.
+vcenter_vm_provision_customization_spec: ""
+
+# Wait for VMware Tools to report an IP after power-on.
+vcenter_vm_provision_wait_for_ip: true
+vcenter_vm_provision_wait_for_ip_timeout: 600
