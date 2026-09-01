@@ -1,0 +1,47 @@
+---
+# Push ACL community content configuration to AAP controller.
+#
+# Prerequisites:
+#   1. Copy site_config.yml.example to site_config.yml and fill in values
+#   2. Pre-create credentials in AAP (machine, vCenter, etc.)
+#   3. Install CaC collection:
+#        ansible-galaxy collection install infra.aap_configuration
+#
+# Usage:
+#   ansible-playbook controller_config/configure_aap.yml \
+#     -e @controller_config/site_config.yml \
+#     -e aap_token=YOUR_PAT_HERE
+
+- name: Configure AAP controller for ACL community content
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - inventories.yml
+    - projects.yml
+    - job_templates.yml
+
+  vars:
+    aap_configuration_async_retries: 120
+    aap_configuration_async_delay: 2
+
+  pre_tasks:
+    - name: Validate required site configuration
+      ansible.builtin.assert:
+        that:
+          - aap_hostname is defined
+          - aap_token is defined
+          - acl_project_scm_url is defined
+        fail_msg: >-
+          Missing required variables. Copy site_config.yml.example to
+          site_config.yml, fill in your values, then run with:
+          -e @controller_config/site_config.yml -e aap_token=YOUR_PAT
+
+  roles:
+    - role: infra.aap_configuration.controller_inventories
+      when: controller_inventories is defined
+    - role: infra.aap_configuration.controller_projects
+      when: controller_projects is defined
+    - role: infra.aap_configuration.controller_job_templates
+      when: controller_templates is defined

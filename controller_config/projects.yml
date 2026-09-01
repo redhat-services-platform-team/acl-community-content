@@ -1,0 +1,16 @@
+---
+# AAP project for ACL community content.
+# All site-specific values are provided by site_config.yml.
+
+controller_projects:
+  - name: acl-community-content
+    description: ACL community automation content (public contributions)
+    organization: "{{ acl_organization | default('Default') }}"
+    scm_type: git
+    scm_url: "{{ acl_project_scm_url }}"
+    scm_branch: "{{ acl_project_scm_branch | default('main') }}"
+    scm_credential: "{{ acl_project_scm_credential | default(omit) }}"
+    scm_clean: true
+    scm_delete_on_update: false
+    scm_update_on_launch: true
+    default_environment: Default execution environment

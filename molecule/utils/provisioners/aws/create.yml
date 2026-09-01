@@ -1,0 +1,248 @@
+---
+# Create EC2 instances for a molecule scenario. AMI selection per host (host
+# or group vars): molecule_aws_image_id pins an exact AMI and takes precedence;
+# otherwise the newest AMI matching molecule_aws_ami_name/molecule_aws_ami_owner
+# is looked up. A single scenario can mix e.g. RHEL 9 and RHEL 10 hosts.
+#
+# Windows guests: set molecule_aws_connection: winrm on the host (with a
+# Windows AMI and a larger instance type). The instance gets user_data that
+# opens a WinRM-over-HTTPS listener, and the runtime inventory carries the
+# Administrator password recovered via ec2_win_password.
+#
+# Every created resource is tagged molecule_scenario=molecule-<scenario>:
+# destroy.yml keys off it, and the scoped IAM policy from
+# hack/create-molecule-iam-user.yml only allows mutating resources that
+# carry it.
+- name: Create AWS instances
+  hosts: localhost
+  gather_facts: false
+  vars:
+    _ephemeral_dir: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}"
+    _ssh_key_path: "{{ _ephemeral_dir }}/identity_file"
+    _prefix: "molecule-{{ lookup('env', 'MOLECULE_SCENARIO_NAME') | default('default', true) }}"
+    _win_user_data: |
+      <powershell>
+      Set-Service -Name WinRM -StartupType Automatic
+      Start-Service WinRM
+      $cert = New-SelfSignedCertificate -DnsName $env:COMPUTERNAME -CertStoreLocation Cert:\LocalMachine\My
+      New-Item -Path WSMan:\LocalHost\Listener -Transport HTTPS -Address * -CertificateThumbPrint $cert.Thumbprint -Force
+      New-NetFirewallRule -Name WinRM-HTTPS -DisplayName WinRM-HTTPS -Enabled True -Direction Inbound -Protocol TCP -LocalPort 5986 -Action Allow
+      </powershell>
+  tasks:
+    # RSA in PEM (pkcs1) format: EC2 Windows password decryption
+    # (ec2_win_password) only works with an RSA key it can read.
+    - name: Generate SSH key pair
+      community.crypto.openssh_keypair:
+        path: "{{ _ssh_key_path }}"
+        type: rsa
+        size: 4096
+        backend: cryptography
+        private_key_format: pkcs1
+      register: _keypair
+
+    - name: Upload public key as EC2 key pair
+      amazon.aws.ec2_key:
+        name: "{{ _prefix }}"
+        key_material: "{{ _keypair.public_key }}"
+        region: "{{ molecule_aws_region }}"
+
+    - name: Create VPC
+      amazon.aws.ec2_vpc_net:
+        name: "{{ _prefix }}"
+        cidr_block: "{{ molecule_aws_vpc_cidr }}"
+        region: "{{ molecule_aws_region }}"
+        tags:
+          molecule_scenario: "{{ _prefix }}"
+      register: _vpc
+      when: not (molecule_aws_vpc_id | default('', true))
+
+    - name: Create public subnet
+      amazon.aws.ec2_vpc_subnet:
+        vpc_id: "{{ _vpc.vpc.id }}"
+        cidr: "{{ molecule_aws_vpc_cidr }}"
+        map_public: true
+        region: "{{ molecule_aws_region }}"
+        tags:
+          Name: "{{ _prefix }}"
+          molecule_scenario: "{{ _prefix }}"
+      register: _subnet
+      when: not (molecule_aws_vpc_id | default('', true))
+
+    - name: Create and attach internet gateway
+      amazon.aws.ec2_vpc_igw:
+        vpc_id: "{{ _vpc.vpc.id }}"
+        region: "{{ molecule_aws_region }}"
+        tags:
+          Name: "{{ _prefix }}"
+          molecule_scenario: "{{ _prefix }}"
+      register: _igw
+      when: not (molecule_aws_vpc_id | default('', true))
+
+    - name: Route subnet to the internet gateway
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ _vpc.vpc.id }}"
+        region: "{{ molecule_aws_region }}"
+        subnets:
+          - "{{ _subnet.subnet.id }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ _igw.gateway_id }}"
+        tags:
+          Name: "{{ _prefix }}"
+          molecule_scenario: "{{ _prefix }}"
+      when: not (molecule_aws_vpc_id | default('', true))
+
+    - name: Resolve target network
+      ansible.builtin.set_fact:
+        _vpc_id: "{{ (molecule_aws_vpc_id | default('', true)) or (_vpc.vpc.id | default('')) }}"
+        _subnet_id: "{{ (molecule_aws_subnet_id | default('', true)) or (_subnet.subnet.id | default('')) }}"
+
+    - name: Determine whether any host uses WinRM
+      ansible.builtin.set_fact:
+        _any_windows: >-
+          {{ groups['molecule']
+             | map('extract', hostvars, 'molecule_aws_connection')
+             | map('default', 'ssh')
+             | select('equalto', 'winrm') | list | length > 0 }}
+
+    # 22 always; 5986 when any host connects over WinRM; anything a scenario
+    # declares in molecule_aws_extra_ports on top of that (content that serves
+    # traffic, e.g. IIS on 80).
+    - name: Create security group allowing SSH/WinRM
+      amazon.aws.ec2_security_group:
+        name: "{{ _prefix }}"
+        description: Molecule test instances
+        region: "{{ molecule_aws_region }}"
+        vpc_id: "{{ _vpc_id }}"
+        tags:
+          molecule_scenario: "{{ _prefix }}"
+        rules: >-
+          {{ [{'proto': 'tcp', 'ports': [22], 'cidr_ip': molecule_aws_ssh_cidr}]
+             + ([{'proto': 'tcp', 'ports': [5986], 'cidr_ip': molecule_aws_ssh_cidr}]
+                if _any_windows | bool else [])
+             + ([{'proto': 'tcp', 'ports': molecule_aws_extra_ports,
+                  'cidr_ip': molecule_aws_ssh_cidr}]
+                if molecule_aws_extra_ports | default([], true) else []) }}
+
+    - name: Find latest matching AMI per host
+      amazon.aws.ec2_ami_info:
+        owners:
+          - "{{ hostvars[item].molecule_aws_ami_owner }}"
+        region: "{{ molecule_aws_region }}"
+        filters:
+          name: "{{ hostvars[item].molecule_aws_ami_name }}"
+          architecture: x86_64
+      register: _amis
+      when: not (hostvars[item].molecule_aws_image_id | default('', true))
+      loop: "{{ groups['molecule'] }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Choose newest matching AMI per host
+      ansible.builtin.set_fact:
+        _image_ids: >-
+          {{ _image_ids | default({}) | combine({
+               item.item: (item.images | sort(attribute='creation_date') | last).image_id
+                          if item is not skipped
+                          else hostvars[item.item].molecule_aws_image_id
+             }) }}
+      loop: "{{ _amis.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Launch instances
+      amazon.aws.ec2_instance:
+        name: "{{ item }}"
+        region: "{{ molecule_aws_region }}"
+        image_id: "{{ _image_ids[item] }}"
+        instance_type: "{{ hostvars[item].molecule_aws_instance_type }}"
+        key_name: "{{ _prefix }}"
+        security_group: "{{ _prefix }}"
+        vpc_subnet_id: "{{ _subnet_id | default(omit, true) }}"
+        user_data: >-
+          {{ _win_user_data
+             if (hostvars[item].molecule_aws_connection | default('ssh')) == 'winrm'
+             else omit }}
+        state: running
+        wait: true
+        tags:
+          molecule_scenario: "{{ _prefix }}"
+      loop: "{{ groups['molecule'] }}"
+      register: _instances
+
+    # Windows only: EC2 encrypts the Administrator password with the key pair;
+    # it becomes available a few minutes after first boot.
+    - name: Retrieve Windows Administrator passwords
+      community.aws.ec2_win_password:
+        instance_id: "{{ item.instances[0].instance_id }}"
+        key_file: "{{ _ssh_key_path }}"
+        region: "{{ molecule_aws_region }}"
+        wait: true
+        wait_timeout: 600
+      register: _win_passwords
+      no_log: true
+      when: (hostvars[item.item].molecule_aws_connection | default('ssh')) == 'winrm'
+      loop: "{{ _instances.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Build runtime inventory entries
+      ansible.builtin.set_fact:
+        _runtime_hosts: >-
+          {{ _runtime_hosts | default({}) | combine({
+               item.item: (
+                 {
+                   'ansible_host': item.instances[0].public_ip_address,
+                   'ansible_user': 'Administrator',
+                   'ansible_password': _win_passwords.results
+                     | selectattr('item.item', 'equalto', item.item)
+                     | map(attribute='win_password') | first,
+                   'ansible_connection': 'winrm',
+                   'ansible_port': 5986,
+                   'ansible_winrm_transport': 'ntlm',
+                   'ansible_winrm_server_cert_validation': 'ignore'
+                 }
+                 if (hostvars[item.item].molecule_aws_connection | default('ssh')) == 'winrm'
+                 else
+                 {
+                   'ansible_host': item.instances[0].public_ip_address,
+                   'ansible_user': molecule_aws_ssh_user,
+                   'ansible_ssh_private_key_file': _ssh_key_path,
+                   'ansible_ssh_common_args': '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+                 }
+               )
+             }) }}
+      no_log: true
+      loop: "{{ _instances.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Ensure ephemeral inventory directory exists
+      ansible.builtin.file:
+        path: "{{ _ephemeral_dir }}/inventory"
+        state: directory
+        mode: "0755"
+
+    # no_log: Windows entries carry ansible_password; mode stays 0600.
+    - name: Write runtime connection inventory
+      ansible.builtin.copy:
+        content: "{{ {'all': {'hosts': _runtime_hosts}} | to_nice_yaml }}"
+        dest: "{{ _ephemeral_dir }}/inventory/molecule_runtime.yml"
+        mode: "0600"
+      no_log: true
+
+    - name: Refresh inventory
+      ansible.builtin.meta: refresh_inventory
+
+# The refresh above loads the just-written runtime inventory, so the guests
+# are addressable from here on. Windows gets a longer budget: first boot runs
+# EC2Launch and the user_data that opens the WinRM-over-HTTPS listener.
+- name: Wait for AWS instances
+  hosts: molecule
+  gather_facts: false
+  tasks:
+    - name: Wait for the host to be reachable
+      ansible.builtin.wait_for_connection:
+        timeout: "{{ 900 if ansible_connection | default('ssh') == 'winrm' else 300 }}"
+        delay: 5
+        sleep: 5

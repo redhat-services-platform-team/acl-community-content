@@ -1,0 +1,113 @@
+---
+- name: Verify — variable assembly produces correct outputs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vcenter_vm_provision_hostname: vcenter.molecule.test
+    vcenter_vm_provision_username: molecule@vsphere.local
+    vcenter_vm_provision_password: molecule-password
+    vcenter_vm_provision_datacenter: molecule-dc
+    vcenter_vm_provision_cluster: molecule-cluster
+    vcenter_vm_provision_template: molecule-template
+    vcenter_vm_provision_name: molecule-test-vm
+    vcenter_vm_provision_cpu: 2
+    vcenter_vm_provision_memory_mb: 4096
+    vcenter_vm_provision_folder: ""
+    vcenter_vm_provision_customization:
+      hostname: ""
+      domain: molecule.test
+      dns_servers:
+        - "10.0.0.2"
+      dns_suffix:
+        - molecule.test
+    vcenter_vm_provision_customization_spec: ""
+  tasks:
+    - name: Build hardware overrides
+      ansible.builtin.set_fact:
+        __hw: >-
+          {{ {}
+             | combine({'num_cpus': vcenter_vm_provision_cpu}
+                       if (vcenter_vm_provision_cpu | int > 0) else {})
+             | combine({'memory_mb': vcenter_vm_provision_memory_mb}
+                       if (vcenter_vm_provision_memory_mb | int > 0) else {}) }}
+
+    - name: Assert hardware overrides are correct
+      ansible.builtin.assert:
+        that:
+          - __hw.num_cpus == 2
+          - __hw.memory_mb == 4096
+        fail_msg: "Hardware overrides wrong: {{ __hw }}"
+
+    - name: Build customization spec
+      ansible.builtin.set_fact:
+        __cust: >-
+          {{ {'hostname': vcenter_vm_provision_customization.hostname
+                          | default(vcenter_vm_provision_name, true),
+              'domain': vcenter_vm_provision_customization.domain}
+             | combine({'dns_servers': vcenter_vm_provision_customization.dns_servers}
+                       if (vcenter_vm_provision_customization.dns_servers
+                           | default([]) | length > 0) else {})
+             | combine({'dns_suffix': vcenter_vm_provision_customization.dns_suffix}
+                       if (vcenter_vm_provision_customization.dns_suffix
+                           | default([]) | length > 0) else {}) }}
+      when:
+        - vcenter_vm_provision_customization_spec | length == 0
+        - vcenter_vm_provision_customization.domain | default('') | length > 0
+
+    - name: Assert customization spec is correct
+      ansible.builtin.assert:
+        that:
+          - __cust.hostname == 'molecule-test-vm'
+          - __cust.domain == 'molecule.test'
+          - __cust.dns_servers | length == 1
+          - __cust.dns_suffix | length == 1
+        fail_msg: "Customization spec wrong: {{ __cust }}"
+
+    - name: Build folder path from empty input
+      ansible.builtin.set_fact:
+        __folder: >-
+          {{ vcenter_vm_provision_folder
+             if (vcenter_vm_provision_folder | default('') | length > 0)
+             else '/' + vcenter_vm_provision_datacenter + '/vm/' }}
+
+    - name: Assert empty folder resolved to datacenter root
+      ansible.builtin.assert:
+        that:
+          - __folder | trim == '/molecule-dc/vm/'
+        fail_msg: "Folder default wrong. Expected /molecule-dc/vm/, got: {{ __folder }}"
+
+- name: Verify — validation rejects missing required variables
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Run validation with empty hostname
+      ansible.builtin.assert:
+        that:
+          - vcenter_vm_provision_hostname | length > 0
+      vars:
+        vcenter_vm_provision_hostname: ""
+      register: __missing_hostname
+      ignore_errors: true
+
+    - name: Confirm validation caught missing hostname
+      ansible.builtin.assert:
+        that:
+          - __missing_hostname is failed
+        fail_msg: Validation should fail when hostname is empty.
+
+    - name: Run validation with empty template
+      ansible.builtin.assert:
+        that:
+          - vcenter_vm_provision_template | length > 0
+      vars:
+        vcenter_vm_provision_template: ""
+      register: __missing_template
+      ignore_errors: true
+
+    - name: Confirm validation caught missing template
+      ansible.builtin.assert:
+        that:
+          - __missing_template is failed
+        fail_msg: Validation should fail when template is empty.

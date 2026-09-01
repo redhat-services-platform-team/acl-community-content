@@ -1,0 +1,92 @@
+---
+- name: Validate required parameters
+  ansible.builtin.assert:
+    that:
+      - vcenter_vm_provision_hostname | length > 0
+      - vcenter_vm_provision_username | length > 0
+      - vcenter_vm_provision_password | length > 0
+      - vcenter_vm_provision_datacenter | length > 0
+      - vcenter_vm_provision_cluster | length > 0
+      - vcenter_vm_provision_template | length > 0
+      - vcenter_vm_provision_name | length > 0
+    fail_msg: >-
+      Missing required variable(s). At minimum set:
+      vcenter_vm_provision_hostname, vcenter_vm_provision_username,
+      vcenter_vm_provision_password, vcenter_vm_provision_datacenter,
+      vcenter_vm_provision_cluster, vcenter_vm_provision_template,
+      vcenter_vm_provision_name.
+    quiet: true
+
+- name: Build hardware overrides
+  ansible.builtin.set_fact:
+    __vcenter_vm_provision_hardware: >-
+      {{ {}
+         | combine({'num_cpus': vcenter_vm_provision_cpu}
+                   if (vcenter_vm_provision_cpu | int > 0) else {})
+         | combine({'memory_mb': vcenter_vm_provision_memory_mb}
+                   if (vcenter_vm_provision_memory_mb | int > 0) else {}) }}
+
+- name: Build customization spec
+  ansible.builtin.set_fact:
+    __vcenter_vm_provision_customization: >-
+      {{ {'hostname': vcenter_vm_provision_customization.hostname
+                      | default(vcenter_vm_provision_name, true),
+          'domain': vcenter_vm_provision_customization.domain}
+         | combine({'dns_servers': vcenter_vm_provision_customization.dns_servers}
+                   if (vcenter_vm_provision_customization.dns_servers
+                       | default([]) | length > 0) else {})
+         | combine({'dns_suffix': vcenter_vm_provision_customization.dns_suffix}
+                   if (vcenter_vm_provision_customization.dns_suffix
+                       | default([]) | length > 0) else {}) }}
+  when:
+    - vcenter_vm_provision_customization_spec | length == 0
+    - vcenter_vm_provision_customization.domain | default('') | length > 0
+
+- name: Clone VM from template
+  community.vmware.vmware_guest:
+    hostname: "{{ vcenter_vm_provision_hostname }}"
+    username: "{{ vcenter_vm_provision_username }}"
+    password: "{{ vcenter_vm_provision_password }}"
+    validate_certs: "{{ vcenter_vm_provision_validate_certs }}"
+    port: "{{ vcenter_vm_provision_port }}"
+    name: "{{ vcenter_vm_provision_name }}"
+    template: "{{ vcenter_vm_provision_template }}"
+    datacenter: "{{ vcenter_vm_provision_datacenter }}"
+    cluster: "{{ vcenter_vm_provision_cluster }}"
+    datastore: "{{ vcenter_vm_provision_datastore | default(omit, true) }}"
+    folder: >-
+      {{ vcenter_vm_provision_folder
+         if (vcenter_vm_provision_folder | default('') | length > 0)
+         else '/' + vcenter_vm_provision_datacenter + '/vm/' }}
+    state: "{{ vcenter_vm_provision_state }}"
+    hardware: >-
+      {{ __vcenter_vm_provision_hardware
+         if (__vcenter_vm_provision_hardware | length > 0)
+         else omit }}
+    disk: >-
+      {{ vcenter_vm_provision_disks
+         if (vcenter_vm_provision_disks | length > 0)
+         else omit }}
+    networks: >-
+      {{ vcenter_vm_provision_networks
+         if (vcenter_vm_provision_networks | length > 0)
+         else omit }}
+    customization_spec: >-
+      {{ vcenter_vm_provision_customization_spec
+         if (vcenter_vm_provision_customization_spec | length > 0)
+         else omit }}
+    customization: >-
+      {{ __vcenter_vm_provision_customization
+         if (__vcenter_vm_provision_customization is defined)
+         else omit }}
+    wait_for_ip_address: "{{ vcenter_vm_provision_wait_for_ip }}"
+    wait_for_ip_address_timeout: "{{ vcenter_vm_provision_wait_for_ip_timeout }}"
+  register: __vcenter_vm_provision_result
+
+- name: Report provisioned VM
+  ansible.builtin.debug:
+    msg:
+      name: "{{ vcenter_vm_provision_name }}"
+      template: "{{ vcenter_vm_provision_template }}"
+      ip_address: "{{ __vcenter_vm_provision_result.instance.ipv4 | default('N/A') }}"
+      uuid: "{{ __vcenter_vm_provision_result.instance.hw_product_uuid | default('N/A') }}"

@@ -9,6 +9,9 @@ exclude_paths:
   - .ansible-lint
   - collections/
   - execution_environments/
+  - controller_config/
+  - molecule/
+  - .config/molecule/
 
 offline: false
 

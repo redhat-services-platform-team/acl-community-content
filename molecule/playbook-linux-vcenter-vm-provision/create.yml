@@ -1,0 +1,8 @@
+---
+- name: No-op create (localhost-only scenario)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Nothing to provision
+      ansible.builtin.debug:
+        msg: Scenario runs entirely on localhost — no instances to create.

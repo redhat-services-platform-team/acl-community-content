@@ -1,0 +1,8 @@
+---
+- name: No-op destroy (localhost-only scenario)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Nothing to tear down
+      ansible.builtin.debug:
+        msg: Scenario runs entirely on localhost — no instances to destroy.

@@ -1,0 +1,39 @@
+# ============================================================================
+# Playbook: Provision a Virtual Machine on vCenter
+# ============================================================================
+#
+# Description:
+#   Clone a virtual machine from a vCenter template with configurable CPU,
+#   memory, network, and guest customization. Delegates to localhost
+#   (vCenter API calls). Designed for AAP survey-driven launches.
+#
+# Tags: pillar:cloud,lifecycle:day1,maturity:l2,platform:linux,tech:vmware
+#
+# Author: Ansible Services Platform Team, Red Hat
+# Version: 1.0.0
+# Date: 2026-08-31
+# License: Apache-2.0
+#
+# ============================================================================
+---
+- name: Provision a virtual machine on vCenter
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  pre_tasks:
+    - name: Build network adapter list from survey inputs
+      ansible.builtin.set_fact:
+        vcenter_vm_provision_networks: >-
+          {{ [{'name': survey_network}
+              | combine({'ip': survey_ip_address,
+                         'netmask': survey_netmask,
+                         'gateway': survey_gateway,
+                         'device_type': 'vmxnet3'}
+                        if (survey_ip_address | default('') | length > 0)
+                        else {'device_type': 'vmxnet3'})]
+          }}
+      when: survey_network is defined
+
+  roles:
+    - role: vcenter_vm_provision

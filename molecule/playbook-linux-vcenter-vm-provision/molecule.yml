@@ -1,0 +1,21 @@
+---
+# localhost-only scenario — no cloud instances needed.
+# Override the base config to remove the AWS lifecycle and linux inventory.
+ansible:
+  executor:
+    args:
+      ansible_playbook:
+        - --inventory=../utils/inventory/base/
+        - --inventory=inventory/
+  playbooks:
+    create: create.yml
+    destroy: destroy.yml
+
+scenario:
+  test_sequence:
+    - dependency
+    - syntax
+    - create
+    - converge
+    - verify
+    - destroy

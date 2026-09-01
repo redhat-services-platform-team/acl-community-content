@@ -1,0 +1,39 @@
+---
+# Group-wide defaults consumed by the shared lifecycle playbooks in
+# molecule/utils/. Per-host overrides (AMI filters, DataSource name, ...) go
+# on the host entries in hosts.yml; scenario-specific overrides go in the
+# scenario's own inventory/ directory.
+
+molecule_aws_region: "{{ lookup('env', 'AWS_REGION') | default('us-east-2', true) }}"
+# Overridable per host.
+molecule_aws_instance_type: t3.medium
+molecule_aws_ssh_user: ec2-user
+# Guest connection, overridable per host: ssh (default) or winrm (Windows —
+# WinRM-over-HTTPS on 5986, Administrator password via ec2_win_password).
+molecule_aws_connection: ssh
+# Where SSH may come from. Tighten to your egress IP for anything long-lived.
+molecule_aws_ssh_cidr: 0.0.0.0/0
+# Extra inbound TCP ports on the test security group, on top of 22 (SSH) and
+# 5986 (WinRM, opened whenever a host connects over WinRM). Scenarios whose
+# content serves traffic override this in their own inventory/group_vars/all.yml
+# (see molecule/playbook-win-iis-deploy/). It is consumed by create.yml running
+# on localhost, so it has to be group-wide — a per-host value would not be
+# visible there.
+molecule_aws_extra_ports: []
+# Unset/empty, create.yml provisions a throwaway VPC + public subnet +
+# internet gateway + route table named molecule-<scenario>, torn down by
+# destroy.yml. Set both (env vars, or replace the lookups with literal IDs) to
+# reuse existing infrastructure instead — that subnet must auto-assign public
+# IPv4 and route to an internet gateway; the runtime inventory connects over
+# the instance's public IP. See molecule/README.md for commands to list
+# available VPCs/subnets.]
+# Optional!
+molecule_aws_vpc_id: "{{ lookup('env', 'MOLECULE_AWS_VPC_ID') }}"
+molecule_aws_subnet_id: "{{ lookup('env', 'MOLECULE_AWS_SUBNET_ID') }}"
+# CIDR for the throwaway VPC and its single subnet (managed-network mode only).
+molecule_aws_vpc_cidr: 10.77.0.0/24
+# AMI selection is per host (molecule_aws_ami_name in hosts.yml); the newest
+# matching AMI is looked up at create time. The owner defaults to Red Hat's
+# publisher account and can be overridden per host. Set molecule_aws_image_id
+# per host to pin an AMI and skip the lookup.
+molecule_aws_ami_owner: "309956199498"

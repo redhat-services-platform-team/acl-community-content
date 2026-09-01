@@ -1,0 +1,82 @@
+---
+# The vcenter_vm_provision role makes live API calls to vCenter which cannot
+# run without a real endpoint.  This converge validates everything the role
+# does BEFORE the API call: parameter validation (assert) and variable
+# assembly (hardware overrides, customization spec, folder default).
+- name: Converge — parameter validation and variable assembly
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    vcenter_vm_provision_hostname: vcenter.molecule.test
+    vcenter_vm_provision_username: molecule@vsphere.local
+    vcenter_vm_provision_password: molecule-password
+    vcenter_vm_provision_validate_certs: false
+    vcenter_vm_provision_port: 443
+    vcenter_vm_provision_datacenter: molecule-dc
+    vcenter_vm_provision_cluster: molecule-cluster
+    vcenter_vm_provision_datastore: molecule-datastore
+    vcenter_vm_provision_folder: ""
+    vcenter_vm_provision_template: molecule-template
+    vcenter_vm_provision_name: molecule-test-vm
+    vcenter_vm_provision_state: poweredon
+    vcenter_vm_provision_cpu: 2
+    vcenter_vm_provision_memory_mb: 4096
+    vcenter_vm_provision_disks: []
+    vcenter_vm_provision_networks:
+      - name: "VM Network"
+        device_type: vmxnet3
+    vcenter_vm_provision_customization:
+      hostname: ""
+      domain: molecule.test
+      dns_servers:
+        - "10.0.0.2"
+      dns_suffix:
+        - molecule.test
+    vcenter_vm_provision_customization_spec: ""
+    vcenter_vm_provision_wait_for_ip: true
+    vcenter_vm_provision_wait_for_ip_timeout: 600
+  tasks:
+    - name: Validate required parameters
+      ansible.builtin.assert:
+        that:
+          - vcenter_vm_provision_hostname | length > 0
+          - vcenter_vm_provision_username | length > 0
+          - vcenter_vm_provision_password | length > 0
+          - vcenter_vm_provision_datacenter | length > 0
+          - vcenter_vm_provision_cluster | length > 0
+          - vcenter_vm_provision_template | length > 0
+          - vcenter_vm_provision_name | length > 0
+        quiet: true
+
+    - name: Build hardware overrides
+      ansible.builtin.set_fact:
+        __vcenter_vm_provision_hardware: >-
+          {{ {}
+             | combine({'num_cpus': vcenter_vm_provision_cpu}
+                       if (vcenter_vm_provision_cpu | int > 0) else {})
+             | combine({'memory_mb': vcenter_vm_provision_memory_mb}
+                       if (vcenter_vm_provision_memory_mb | int > 0) else {}) }}
+
+    - name: Build customization spec
+      ansible.builtin.set_fact:
+        __vcenter_vm_provision_customization: >-
+          {{ {'hostname': vcenter_vm_provision_customization.hostname
+                          | default(vcenter_vm_provision_name, true),
+              'domain': vcenter_vm_provision_customization.domain}
+             | combine({'dns_servers': vcenter_vm_provision_customization.dns_servers}
+                       if (vcenter_vm_provision_customization.dns_servers
+                           | default([]) | length > 0) else {})
+             | combine({'dns_suffix': vcenter_vm_provision_customization.dns_suffix}
+                       if (vcenter_vm_provision_customization.dns_suffix
+                           | default([]) | length > 0) else {}) }}
+      when:
+        - vcenter_vm_provision_customization_spec | length == 0
+        - vcenter_vm_provision_customization.domain | default('') | length > 0
+
+    - name: Build folder path (empty input falls back to datacenter root)
+      ansible.builtin.set_fact:
+        __vcenter_vm_provision_folder: >-
+          {{ vcenter_vm_provision_folder
+             if (vcenter_vm_provision_folder | default('') | length > 0)
+             else '/' + vcenter_vm_provision_datacenter + '/vm/' }}

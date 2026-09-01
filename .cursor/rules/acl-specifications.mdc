@@ -1,0 +1,30 @@
+---
+description: Consult and maintain the ACL specifications document for all structural, naming, and CaC decisions
+alwaysApply: true
+---
+
+# ACL Specifications
+
+All architectural and operational decisions for this repository are documented
+in `docs/specifications.md`. This file is the single source of truth.
+
+## When to consult
+
+- Before creating or renaming playbooks, roles, job templates, or CaC files
+- Before changing naming conventions or directory structure
+- When answering questions about how the repository is organized
+- When proposing new content or consolidation
+
+## When to update
+
+If a decision changes (e.g. new naming convention, different CaC collection,
+new exclusion), update `docs/specifications.md` in the same commit as the
+code change. Keep the spec and the code in sync.
+
+## Key decisions (quick reference)
+
+- Flat `playbooks/` with `linux-`/`win-` prefix; no subdirectories
+- Roles at `roles/` with GPA-prefixed defaults and embedded README
+- CaC via `infra.aap_configuration`; credentials/hosts managed outside CaC
+- All site-specific values in `controller_config/site_config.yml` (gitignored)
+- `Default execution environment` for all job templates
